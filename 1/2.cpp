@@ -1,9 +1,10 @@
-#include <algorithm>
-#include <cstdlib>
+#include <charconv>
 #include <iostream>
 #include <iterator>
 #include <string>
-#include <vector>
+#include <string_view>
+
+const static int dial_config = 100;
 
 std::string load_input() {
   std::string input{std::istreambuf_iterator<char>(std::cin),
@@ -11,54 +12,85 @@ std::string load_input() {
   return input;
 }
 
-int mod(int a, int b) {
-  int c = a % b;
-  return c < 0 ? c + b : c;
+struct spin_state {
+  int new_value{};
+  int num_crossed_zero{};
+};
+
+spin_state spin(int current_value, char direction, int turns) {
+
+  spin_state new_state{};
+
+  if (direction == 'L') {
+    new_state.new_value =
+        std::abs(current_value - turns + dial_config) % dial_config;
+    new_state.num_crossed_zero =
+        std::abs((current_value - turns - dial_config) / dial_config);
+
+    if (current_value == 0) {
+      new_state.num_crossed_zero--;
+    }
+  } else if (direction == 'R') {
+    new_state.new_value = (current_value + turns) % dial_config;
+    new_state.num_crossed_zero = (current_value + turns) / dial_config;
+  } else {
+    std::cout << "Invalid direction!" << direction;
+    std::exit(-1);
+  }
+
+  if (new_state.new_value == 0 && new_state.num_crossed_zero > 0) {
+    new_state.num_crossed_zero--;
+  }
+
+  return new_state;
 }
 
-std::vector<int> calculate_positions(std::string_view input) {
-  size_t start{0};
+int calculate_password(std::string_view input) {
+  size_t index{0};
+  int password{0};
 
   // Starts at 50
-  std::vector<int> positions{50};
+  int current_value{50};
 
-  while (start < input.size()) {
-    size_t end = input.find('\n', start);
+  while (index < input.size()) {
 
-    // safety check incase there are no more new lines
+    size_t end = input.find('\n', index);
+
     if (end == std::string_view::npos) {
       end = input.size();
     }
 
-    std::string_view move{input.substr(start, end - start)};
-    char direction{move.front()};
-    int num_of_turns{};
+    std::string_view move{input.substr(index, end - index)};
 
-    // Help from perplexity
-    auto [ptr, ec] = std::from_chars(move.data() + 1, move.data() + move.size(),
-                                     num_of_turns);
+    int turns;
+    auto result =
+        std::from_chars(move.data() + 1, move.data() + move.size(), turns);
 
-    if (ec != std::errc() || ptr != move.data() + move.size()) {
-      std::cerr << "Invalid state while extracting numbers from line! "
-                << static_cast<int>(ec) << std::endl;
-      exit(-1);
+    if (result.ec == std::errc::invalid_argument) {
+      std::cout << "Could not convert string to int!";
     }
 
-    if (direction == 'L') {
-      positions.push_back(mod(positions.back() - num_of_turns, 100));
-    } else if (direction == 'R') {
-      positions.push_back(mod(positions.back() + num_of_turns, 100));
-    } else {
-      std::cerr << "Invalid direction has to be one of 'L' or 'R'!";
-      exit(-1);
+    spin_state post_spin_state{spin(current_value, input.at(index), turns)};
+
+    if (post_spin_state.new_value == 0) {
+      password++;
     }
 
-    start = end + 1;
+    password += post_spin_state.num_crossed_zero;
+    current_value = post_spin_state.new_value;
+
+    std::cout << "Move: " << move
+              << " New position: " << post_spin_state.new_value << ", "
+              << post_spin_state.num_crossed_zero << '\n';
+    size_t next_nl = input.find("\n", index);
+
+    if (next_nl == std::string_view::npos) {
+      break;
+    }
+    index = next_nl + 1;
   }
-  return positions;
+
+  return password;
 }
 
-int main() {
-  std::vector<int> positions{calculate_positions(load_input())};
-  std::cout << std::count(positions.begin(), positions.end(), 0);
-}
+int main() { std::cout << calculate_password(load_input()); }
