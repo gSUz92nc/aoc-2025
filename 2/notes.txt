@@ -1,0 +1,1 @@
+only check up to half of max range digits
